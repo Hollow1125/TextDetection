@@ -1,0 +1,17 @@
+/build/
+/Debug/
+/Release/
+/x64/
+/.vs/
+CMakeCache.txt
+cmake_install.cmake
+CMakeFiles/
+*.jpg
+*.json
+*.vcxproj*
+*.sln
+*.filters
+*.user
+*.pdb
+*.dir
+ZERO_CHECK.*

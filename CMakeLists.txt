@@ -2,6 +2,7 @@ cmake_minimum_required(VERSION 3.10)
 project(DocumentDetection LANGUAGES CXX)
 set(CMAKE_CXX_STANDARD 17)
 
+
 add_executable(DocumentDetection main.cpp)
 
 find_package(OpenCV REQUIRED)
