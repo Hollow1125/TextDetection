@@ -46,8 +46,8 @@ int main(int argc, char** argv)
     }
 
     std::filesystem::path pathToImages(imagePath);
-    std::filesystem::path outputDirEAST = pathToImages / "EAST";
-    std::filesystem::path outputDirDB = pathToImages / "DB50";
+    std::filesystem::path outputDirEAST = pathToImages.parent_path() / "ImagesProcessedWithEAST";
+    std::filesystem::path outputDirDB = pathToImages.parent_path() / "ImagesProcessedWithDB50";
     
     try 
     {
