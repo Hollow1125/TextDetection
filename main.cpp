@@ -229,8 +229,8 @@ void EASTTextDetection(cv::Mat &image,
         ;
         
         double detScale = 1.0;
-        cv::Size detInputSize = cv::Size(320, 320);
-        cv::Scalar detMean = cv::Scalar(123.68, 116.78, 103.94);
+        cv::Size detInputSize = cv::Size(736, 736);
+        cv::Scalar detMean = cv::Scalar(122.67891434, 116.66876762, 104.00698793);
         bool swapRB = true;
         model.setInputParams(detScale, detInputSize, detMean, swapRB);
 
@@ -278,9 +278,10 @@ void DB50TextDetection(cv::Mat &image,
 
         std::vector<std::vector<cv::Point>> detResults;
         model.detect(image, detResults);
+        int lineThickness = 2;
 
         for (const auto& polygon : detResults) {
-            cv::polylines(image, polygon, true, cv::Scalar(0, 255, 0), 2);
+            cv::polylines(image, polygon, true, cv::Scalar(0, 255, 0), lineThickness);
         }
         cv::imwrite(dbOutputPath.string(), image);
     } 
