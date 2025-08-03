@@ -1,29 +1,42 @@
 #include <opencv2/opencv.hpp>
 #include <opencv2/dnn.hpp>
 #include <iostream>
+#include <windows.h>
 #include <vector>
 #include <filesystem>
+#include <future>
+#include <chrono>
 
 const cv::String keys =
-    "{help h        | | Print this message}"
-    "{inputImage i  | | Path to input image}"
-    "{eastModel e    | | Path to EAST model}"
-    "{dbModel d      | | Path to DB model}";
+    "{help h         | | Вывод справки}"
+    "{inputImage i   | | Путь к папке с изображениями}"
+    "{eastModel e    | | Путь к модели EAST}"
+    "{dbModel d      | | Путь к модели DB50}";
 
-void DB50TextDetection(cv::Mat image, cv::String &modelPath, std::string& outputPath);
-void EASTTextDetection(cv::Mat image, cv::String &modelPath, std::string& outputPath);
-void ProbabilisticHoughTransform(cv::Mat image, cv::String &modelPath);
-void HoughTransform(cv::Mat image, cv::String &modelPath);
-void CheckDirectoryExists(std::filesystem::path &directory);
+void EASTTextDetection(cv::Mat &image, 
+    const cv::String &modelPath, 
+    const std::filesystem::path& outputDirEAST, 
+    const std::filesystem::path& parentDir, 
+    const std::filesystem::directory_entry &i);
+
+void DB50TextDetection(cv::Mat &image, 
+    const cv::String &modelPath, 
+    const std::filesystem::path& outputDirDB, 
+    const std::filesystem::path& parentDir, 
+    const std::filesystem::directory_entry &i);
+
+void ProbabilisticHoughTransform(cv::Mat &image, const cv::String &modelPath);
+void HoughTransform(cv::Mat &image, const cv::String &modelPath);
+void CheckDirectoryExists(const std::filesystem::path &directory);
 
 int main(int argc, char** argv)
 {
-    setlocale(LC_ALL, "Rus");
+    SetConsoleOutputCP(CP_UTF8);
 
     cv::utils::logging::setLogLevel(cv::utils::logging::LOG_LEVEL_ERROR);
 
     cv::CommandLineParser parser(argc, argv, keys);
-    parser.about("Use this programm to detect paper sheets on an image");
+    parser.about("Данная программа определяет наличие текста на изображениях");
     if (argc == 1 || parser.has("help"))
     {
         parser.printMessage();
@@ -35,31 +48,50 @@ int main(int argc, char** argv)
         return 1;
     }
 
-    cv::String imagePath = parser.get<cv::String>("inputImage");
+    cv::String imagePath = parser.get<cv::String>("inputImage");  
     cv::String eastModelPath = parser.get<cv::String>("eastModel");
     cv::String dbModelPath = parser.get<cv::String>("dbModel");
 
     if (imagePath.empty())
     {
-        std::wcout << L"Ошибка чтения изображения" << std::endl;
+        std::cout << "Ошибка чтения изображения" << std::endl;
         return 1;
     }
 
     std::filesystem::path pathToImages(imagePath);
     std::filesystem::path outputDirEAST = pathToImages.parent_path() / "ImagesProcessedWithEAST";
     std::filesystem::path outputDirDB = pathToImages.parent_path() / "ImagesProcessedWithDB50";
-    
+    bool pathToEASTProvided = true;
+    bool pathToDB50Provided = true;
+
     try 
     {
-        std::filesystem::create_directory(outputDirEAST);
-        std::filesystem::create_directory(outputDirDB);
+        if (!eastModelPath.empty())
+        {
+            std::filesystem::create_directory(outputDirEAST);
+        }
+        else
+        {
+            pathToEASTProvided = false;
+            std::cout << "Модель EAST не найдена" << std::endl;
+        }
+        if (!dbModelPath.empty())
+        {
+            std::filesystem::create_directory(outputDirDB);
+        }
+        else
+        {
+            pathToDB50Provided = false;
+            std::cout << "Модель DB50 не найдена" << std::endl;
+        }
     } 
     catch (const std::filesystem::filesystem_error& e) 
     {
-        std::wcerr << L"Ошибка создания каталога" << e.what() << std::endl;
+        std::cerr << "Ошибка создания каталога: " << e.what() << std::endl;
         return 1;
     }
 
+    auto start = std::chrono::high_resolution_clock::now();
     try
     {
         for (const auto& i : std::filesystem::recursive_directory_iterator(pathToImages))
@@ -72,52 +104,51 @@ int main(int argc, char** argv)
                     cv::Mat image = cv::imread(i.path().string());
                     if(image.empty())
                     {
-                        std::cout << L"Ошибка загрузки изображения" << std::endl;
+                        std::cout << "Ошибка загрузки изображения" << std::endl;
                         continue;
                     }
                     
                     std::filesystem::path relativePath = std::filesystem::relative(i.path(), pathToImages);
                     std::filesystem::path parentDir = relativePath.parent_path();
 
-                    std::filesystem::path eastOutputPath = outputDirEAST / parentDir / i.path().filename();
-                    std::filesystem::path dbOutputPath = outputDirDB / parentDir / i.path().filename();
-
-                    CheckDirectoryExists(eastOutputPath.parent_path());
-                    CheckDirectoryExists(dbOutputPath.parent_path());
-
+                    if (pathToEASTProvided)
+                    {
+                        EASTTextDetection(image.clone(), eastModelPath, outputDirEAST, parentDir, i);
+                    }
+                    if (pathToDB50Provided)
+                    {
+                        DB50TextDetection(image.clone(), dbModelPath, outputDirDB, parentDir, i);
+                    }
                     //ProbabilisticHoughTransform(image);
                     //HoughTransform(image);
-
-                    if (!eastModelPath.empty())
-                    {
-                        EASTTextDetection(image.clone(), eastModelPath, eastOutputPath.string());
-                    }
-                    else
-                    {
-                        std::cout << "No path for EAST model have been provided" << std::endl;
-                    }
-                    if (!dbModelPath.empty())
-                    {
-                        DB50TextDetection(image.clone(), dbModelPath, dbOutputPath.string());
-                    }
-                    else
-                    {
-                        std::cout << "No path for DB50 model have been provided" << std::endl;
-                    }
                 }
             }
         }
     }
-    catch(const std::exception& e)
+    catch (const std::filesystem::filesystem_error& e)
     {
-        std::cerr << e.what() << '\n';
+        std::cerr << "Ошибка файловой системы: " << e.what() << std::endl;
+    }
+    catch (const cv::Exception& e)
+    {
+        std::cerr << "Ошибка OpenCV: " << e.what() << std::endl;
+    }
+    catch (const std::exception& e)
+    {
+        std::cerr << "Ошибка: " << e.what() << std::endl;
+    }
+    catch (...)
+    {
+        std::cerr << "Неизвестная ошибка " << std::endl;
     }
 
-
+    auto stop = std::chrono::high_resolution_clock::now();
+    auto duration = std::chrono::duration_cast<std::chrono::microseconds>(stop - start);
+    std::cout << "time: " << std::dec << duration.count() / 1e6 << " seconds" << std::endl;
     return 0;
 }
 
-void CheckDirectoryExists(std::filesystem::path &directory)
+void CheckDirectoryExists(const std::filesystem::path &directory)
 {
     if (!std::filesystem::exists(directory)) 
     {
@@ -125,7 +156,7 @@ void CheckDirectoryExists(std::filesystem::path &directory)
     }
 }
 
-void ProbabilisticHoughTransform(cv::Mat image)
+void ProbabilisticHoughTransform(cv::Mat &image)
 {
     cv::Mat HoughLinesPImage = image.clone();
     //Mat resized, upscaled;
@@ -148,7 +179,7 @@ void ProbabilisticHoughTransform(cv::Mat image)
     imwrite("houghlinesP.jpg", HoughLinesPImage);
 }
 
-void HoughTransform(cv::Mat image)
+void HoughTransform(cv::Mat &image)
 {
     cv::Mat HoughLinesImage = image.clone();
     std::vector<cv::Vec2f> linesP;
@@ -178,14 +209,21 @@ void HoughTransform(cv::Mat image)
     imwrite("HoughLines.jpg", HoughLinesImage);
 }
 
-void EASTTextDetection(cv::Mat image, cv::String &modelPath, std::string& outputPath)
+void EASTTextDetection(cv::Mat &image, 
+    const cv::String &modelPath, 
+    const std::filesystem::path& outputDirEAST, 
+    const std::filesystem::path& parentDir, 
+    const std::filesystem::directory_entry &i)
 {
     try
     {
         cv::dnn::TextDetectionModel_EAST model(modelPath);
         
+        std::filesystem::path  eastOutputPath = outputDirEAST / parentDir / i.path().filename();
+        CheckDirectoryExists(eastOutputPath.parent_path());
+
         float confThreshold = 0.5;
-        float nmsThreshold = 0.4;
+        float nmsThreshold = 0.4f;
         model.setConfidenceThreshold(confThreshold)
             .setNMSThreshold(nmsThreshold)
         ;
@@ -204,21 +242,28 @@ void EASTTextDetection(cv::Mat image, cv::String &modelPath, std::string& output
         for (const auto& polygon : detResults) {
             cv::polylines(image, polygon, rectangleIsClosed, cv::Scalar(0, 255, 0), lineThickness);
         }
-        imwrite(outputPath, image);
+        imwrite(eastOutputPath.string(), image);
     }
     catch (const cv::Exception& e) 
     {
-        std::wcerr << L"Ошибка: " << e.what() << std::endl;
+        std::cerr << "Ошибка: " << e.what() << std::endl;
     }
 }
 
-void DB50TextDetection(cv::Mat image, cv::String& modelPath, std::string& outputPath) 
+void DB50TextDetection(cv::Mat &image, 
+    const cv::String &modelPath, 
+    const std::filesystem::path& outputDirDB, 
+    const std::filesystem::path& parentDir, 
+    const std::filesystem::directory_entry &i)
 {
     try {
         cv::dnn::TextDetectionModel_DB model(modelPath);
 
-        float binThresh = 0.3;
-        float polyThresh = 0.1;
+        std::filesystem::path  dbOutputPath = outputDirDB / parentDir / i.path().filename();
+        CheckDirectoryExists(dbOutputPath.parent_path());
+
+        float binThresh = 0.3f;
+        float polyThresh = 0.1f;
         uint maxCandidates = 10000;
         double unclipRatio = 1.5;
         model.setBinaryThreshold(binThresh)
@@ -237,10 +282,10 @@ void DB50TextDetection(cv::Mat image, cv::String& modelPath, std::string& output
         for (const auto& polygon : detResults) {
             cv::polylines(image, polygon, true, cv::Scalar(0, 255, 0), 2);
         }
-        cv::imwrite(outputPath, image);
+        cv::imwrite(dbOutputPath.string(), image);
     } 
     catch (const cv::Exception& e) 
     {
-        std::wcerr << L"Ошибка: " << e.what() << std::endl;
+        std::cerr << "Ошибка: " << e.what() << std::endl;
     }
 }
