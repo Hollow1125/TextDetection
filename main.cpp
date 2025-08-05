@@ -61,8 +61,6 @@ int main(int argc, char** argv)
     std::filesystem::path pathToImages(imagePath);
     std::filesystem::path outputDirEAST = pathToImages.parent_path() / "ImagesProcessedWithEAST";
     std::filesystem::path outputDirDB = pathToImages.parent_path() / "ImagesProcessedWithDB50";
-    bool pathToEASTProvided = true;
-    bool pathToDB50Provided = true;
 
     try 
     {
@@ -72,7 +70,6 @@ int main(int argc, char** argv)
         }
         else
         {
-            pathToEASTProvided = false;
             std::cout << "Модель EAST не найдена" << std::endl;
         }
         if (!dbModelPath.empty())
@@ -81,7 +78,6 @@ int main(int argc, char** argv)
         }
         else
         {
-            pathToDB50Provided = false;
             std::cout << "Модель DB50 не найдена" << std::endl;
         }
     } 
@@ -111,16 +107,48 @@ int main(int argc, char** argv)
                     std::filesystem::path relativePath = std::filesystem::relative(i.path(), pathToImages);
                     std::filesystem::path parentDir = relativePath.parent_path();
 
-                    if (pathToEASTProvided)
-                    {
-                        EASTTextDetection(image.clone(), eastModelPath, outputDirEAST, parentDir, i);
-                    }
-                    if (pathToDB50Provided)
-                    {
-                        DB50TextDetection(image.clone(), dbModelPath, outputDirDB, parentDir, i);
-                    }
+                    // if (pathToEASTProvided)
+                    // {
+                    //     EASTTextDetection(image.clone(), eastModelPath, outputDirEAST, parentDir, i);
+                    // }
+                    // if (pathToDB50Provided)
+                    // {
+                    //     DB50TextDetection(image.clone(), dbModelPath, outputDirDB, parentDir, i);
+                    // }
                     //ProbabilisticHoughTransform(image);
                     //HoughTransform(image);
+                    std::future<void> eastFuture;
+                    std::future<void> dbFuture;
+
+                    if (!eastModelPath.empty())
+                    {
+                        eastFuture = std::async(std::launch::async, 
+                            EASTTextDetection, 
+                            image.clone(), 
+                            eastModelPath, 
+                            outputDirEAST, 
+                            parentDir, 
+                            i);
+                    }
+                    if (!dbModelPath.empty())
+                    {
+                        dbFuture = std::async(std::launch::async, 
+                            DB50TextDetection, 
+                            image.clone(), 
+                            dbModelPath, 
+                            outputDirDB, 
+                            parentDir, 
+                            i);
+                    }
+
+                    if (!eastModelPath.empty())
+                    {
+                        eastFuture.get();
+                    }
+                    if (!dbModelPath.empty()) 
+                    {
+                        dbFuture.get();
+                    }
                 }
             }
         }
