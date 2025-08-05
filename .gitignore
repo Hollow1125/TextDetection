@@ -16,3 +16,4 @@ CMakeFiles/
 *.pdb
 *.dir
 ZERO_CHECK.*
+.vscode/
